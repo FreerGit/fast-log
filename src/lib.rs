@@ -1,12 +1,9 @@
 use std::cell::UnsafeCell;
 use std::fs::File;
 use std::io::Write;
-use std::time::Instant;
-
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::thread::{self};
 
 #[derive(Clone)]
 enum LogType {
@@ -118,14 +115,13 @@ impl RingBuffer {
     }
 }
 
-struct LoggerFileOptions {
+pub struct LoggerFileOptions {
     pub file_path: String,
     pub append_mode: bool,
 }
 
-struct Logger {
+pub struct Logger {
     buffer: Arc<RingBuffer>,
-    // pub logger_thread: JoinHandle<>,
 }
 
 impl Logger {
@@ -133,16 +129,13 @@ impl Logger {
         let buffer = Arc::new(RingBuffer::new(size));
         let buffer_clone = buffer.clone();
 
-        match options {
-            Some(ref options) => {
-                if !std::path::Path::new(&options.file_path).exists() {
-                    panic!(
-                        "The provided file: \"{}\" does not exist",
-                        options.file_path
-                    )
-                }
+        if let Some(ref options) = options {
+            if !std::path::Path::new(&options.file_path).exists() {
+                panic!(
+                    "The provided file: \"{}\" does not exist",
+                    options.file_path
+                )
             }
-            None => {}
         }
 
         thread::spawn(move || {
@@ -182,19 +175,19 @@ impl Logger {
         Logger { buffer }
     }
 
-    fn shutdown(&self) {
+    pub fn shutdown(&self) {
         self.buffer.shutdown();
         while !self.buffer.is_empty() {
             thread::yield_now();
         }
     }
 
-    fn log<F>(&self, mut f: F)
+    pub fn log<F>(&self, f: F)
     where
         F: FnMut() -> String + Send + 'static,
     {
         let mut entry = LogEntry {
-            closure: Box::new(move || f()),
+            closure: Box::new(f),
             to: LogType::Ephemeral,
         };
         while !self.buffer.push(&mut entry) {
@@ -202,68 +195,16 @@ impl Logger {
         }
     }
 
-    fn log_f<F>(&self, mut f: F)
+    pub fn log_f<F>(&self, f: F)
     where
         F: FnMut() -> String + Send + 'static,
     {
         let mut entry = LogEntry {
-            closure: Box::new(move || f()),
+            closure: Box::new(f),
             to: LogType::File,
         };
         while !self.buffer.push(&mut entry) {
             thread::yield_now();
         }
     }
-}
-
-#[macro_export]
-macro_rules! measure {
-    ($($code:tt)*) => {{
-        let start = Instant::now();
-        { $($code)* };
-        start.elapsed().as_nanos()
-    }}
-}
-
-fn main() {
-    let op = LoggerFileOptions {
-        file_path: "log.txt".to_owned(),
-        append_mode: false, // Should the logger write over the file between restarts?
-    };
-    let logger = Logger::new(1024 * 8, Some(op));
-
-    // Example usage with closures
-    let t1 = measure!({
-        for _ in 0..1000 {
-            logger.log(|| format!("A msg: {}", 1));
-            logger.log(|| format!("A msg: {}", 2));
-        }
-    });
-
-    let t22 = measure!({
-        for _ in 0..5 {
-            logger.log_f(|| format!("A msg: {}", 1));
-            logger.log_f(|| format!("A msg: {}", 2));
-        }
-    });
-
-    let x = 55;
-    logger.log(move || format!("A message: {}", x));
-    let t1_5 = measure!({
-        logger.log(move || format!("A message: {}", x));
-    });
-    let t2 = measure!({
-        logger.log(|| format!("Another message: {} {}", "Hello", "World"));
-    });
-
-    let t3 = measure!({
-        logger.log(|| {
-            let result = 42;
-            format!("The answer is: {}", result)
-        });
-    });
-    // thread::sleep(Duration::from_secs(1));
-    logger.shutdown();
-    println!("t1: {}, t1_5: {}, t2 {}, t3 {}", t1 / 1000, t1_5, t2, t3);
-    // Keep the main thread alive to see the results
 }
