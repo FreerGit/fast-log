@@ -115,6 +115,7 @@ impl RingBuffer {
     }
 }
 
+#[derive(Clone)]
 pub struct LoggerFileOptions {
     pub file_path: String,
     pub append_mode: bool,
@@ -206,5 +207,34 @@ impl Logger {
         while !self.buffer.push(&mut entry) {
             thread::yield_now();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn setup() {
+        fs::File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("log.txt")
+            .unwrap();
+    }
+
+    #[test]
+    fn simple_to_file() {
+        setup();
+        let o = LoggerFileOptions {
+            file_path: "log.txt".to_owned(),
+            append_mode: false,
+        };
+        let logger = Logger::new(1024, Some(o.clone()));
+        logger.log_f(|| "to file".to_owned());
+        logger.shutdown();
+        let bytes = fs::read(o.file_path).unwrap();
+        assert_eq!(String::from_utf8(bytes).unwrap(), "to file\n".to_owned());
     }
 }
