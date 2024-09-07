@@ -1,10 +1,10 @@
 [package]
-name = "fast-log"
+name = "ring-log"
 version = "0.1.0"
 edition = "2021"
 description = "High-performance logger with lock-free ring buffer"
 license = "MIT"
-repository = "https://github.com/freergit/timing.git"
+repository = "https://github.com/freergit/ring-log.git"
 readme = "README.md"
 
 [dependencies]
