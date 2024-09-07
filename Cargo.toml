@@ -2,5 +2,9 @@
 name = "fast-log"
 version = "0.1.0"
 edition = "2021"
+description = "High-performance logger with lock-free ring buffer"
+license = "MIT"
+repository = "https://github.com/freergit/timing.git"
+readme = "README.md"
 
 [dependencies]
