@@ -219,7 +219,7 @@ macro_rules! format_log {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{fs, io::Read, time::Instant};
 
     fn setup() {
         fs::File::options()
@@ -236,6 +236,11 @@ mod tests {
     }
 
     #[test]
+    fn run_test_sequentially() {
+        simple_to_file();
+        correct_ord();
+    }
+
     fn simple_to_file() {
         setup();
         let o = LoggerFileOptions {
@@ -247,7 +252,27 @@ mod tests {
         logger.shutdown();
         let bytes = fs::read(o.path).unwrap();
         teardown();
-
         assert_eq!(String::from_utf8(bytes).unwrap(), "to file\n".to_owned());
+    }
+
+    fn correct_ord() {
+        setup();
+        let o = LoggerFileOptions {
+            path: "log.txt",
+            append_mode: false,
+        };
+        let logger = Logger::new(1024 * 1024, Some(o));
+        for i in 0..100_000 {
+            logger.log_f(move || format!("{}", i));
+        }
+
+        logger.shutdown();
+
+        let mut i = 0;
+        for line in fs::read_to_string("log.txt").unwrap().lines() {
+            assert_eq!(line, format!("{}", i));
+            i += 1;
+        }
+        teardown();
     }
 }
