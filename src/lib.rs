@@ -219,7 +219,7 @@ macro_rules! format_log {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, io::Read, time::Instant};
+    use std::fs;
 
     fn setup() {
         fs::File::options()
@@ -268,10 +268,8 @@ mod tests {
 
         logger.shutdown();
 
-        let mut i = 0;
-        for line in fs::read_to_string("log.txt").unwrap().lines() {
+        for (i, line) in fs::read_to_string("log.txt").unwrap().lines().enumerate() {
             assert_eq!(line, format!("{}", i));
-            i += 1;
         }
         teardown();
     }
