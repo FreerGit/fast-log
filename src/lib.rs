@@ -115,42 +115,27 @@ impl RingBuffer {
     }
 }
 
-#[derive(Clone)]
-pub struct LoggerFileOptions {
-    pub file_path: String,
-    pub append_mode: bool,
-}
-
 pub struct Logger {
     buffer: Arc<RingBuffer>,
+    file: Option<File>,
+}
+
+#[derive(Clone, Copy)]
+pub struct LoggerFileOptions {
+    path: &'static str,
+    append_mode: bool,
 }
 
 impl Logger {
-    pub fn new(size: usize, options: Option<LoggerFileOptions>) -> Self {
+    pub fn new(size: usize, log_op: Option<LoggerFileOptions>) -> Self {
         let buffer = Arc::new(RingBuffer::new(size));
         let buffer_clone = buffer.clone();
 
-        if let Some(ref options) = options {
-            if !std::path::Path::new(&options.file_path).exists() {
-                panic!(
-                    "The provided file: \"{}\" does not exist",
-                    options.file_path
-                )
-            }
-        }
-
         thread::spawn(move || {
             let mut file = None;
-            if let Some(op) = options {
-                file = Some(
-                    File::options()
-                        .write(true)
-                        .append(op.append_mode)
-                        .open(op.file_path)
-                        .unwrap(),
-                );
+            if let Some(op) = log_op {
+                file = Some(Logger::open_log_file(op));
             }
-
             loop {
                 if let Some(entry) = buffer_clone.pop() {
                     let mut message = (entry.closure)();
@@ -158,10 +143,9 @@ impl Logger {
                     match entry.to {
                         LogType::File => {
                             message.push('\n');
-                            file.as_mut()
-                                .unwrap()
-                                .write_all(message.as_bytes())
-                                .unwrap()
+                            let f = file.as_mut().unwrap();
+                            f.write_all(message.as_bytes()).unwrap();
+                            f.flush().unwrap();
                         }
                         LogType::Ephemeral => println!("{}", message),
                     };
@@ -173,13 +157,28 @@ impl Logger {
             }
         });
 
-        Logger { buffer }
+        let file = log_op.map(Logger::open_log_file);
+
+        Logger { buffer, file }
+    }
+
+    fn open_log_file(op: LoggerFileOptions) -> File {
+        File::options()
+            .write(true)
+            .append(op.append_mode)
+            .create(true)
+            .open(op.path)
+            .unwrap()
     }
 
     pub fn shutdown(&self) {
         self.buffer.shutdown();
         while !self.buffer.is_empty() {
             thread::yield_now();
+        }
+
+        if let Some(ref file) = self.file {
+            file.sync_all().unwrap();
         }
     }
 
@@ -210,6 +209,13 @@ impl Logger {
     }
 }
 
+#[macro_export]
+macro_rules! format_log {
+    ($($arg:tt)*) => {
+        format!("{}:{}: {}", file!(), line!(), format!($($arg)*))
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,21 +226,28 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open("log.txt")
             .unwrap();
+    }
+
+    fn teardown() {
+        fs::remove_file("log.txt").unwrap();
     }
 
     #[test]
     fn simple_to_file() {
         setup();
         let o = LoggerFileOptions {
-            file_path: "log.txt".to_owned(),
+            path: "log.txt",
             append_mode: false,
         };
-        let logger = Logger::new(1024, Some(o.clone()));
+        let logger = Logger::new(1024, Some(o));
         logger.log_f(|| "to file".to_owned());
         logger.shutdown();
-        let bytes = fs::read(o.file_path).unwrap();
+        let bytes = fs::read(o.path).unwrap();
+        teardown();
+
         assert_eq!(String::from_utf8(bytes).unwrap(), "to file\n".to_owned());
     }
 }
