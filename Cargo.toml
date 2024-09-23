@@ -1,10 +1,11 @@
 [package]
 name = "ring-log"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "High-performance logger with lock-free ring buffer"
 license = "MIT"
 repository = "https://github.com/freergit/ring-log.git"
 readme = "README.md"
+keywords = ["log", "logger", "logging", "ring-buffer", "multi-threading"]
 
 [dependencies]
